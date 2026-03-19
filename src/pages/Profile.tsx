@@ -1,14 +1,30 @@
 import { useState } from 'react';
 import { useAuth } from '../App';
-import { signOut, auth, signInWithPopup, googleProvider } from '../firebase';
-import { User, Briefcase, Settings, Share2, LogOut, LogIn, ChevronRight, Coins, CreditCard, Shield } from 'lucide-react';
+import { signOut, auth, signInWithPopup, googleProvider, db, doc, updateDoc } from '../firebase';
+import { User, Briefcase, Settings, Share2, LogOut, LogIn, ChevronRight, Coins, CreditCard, Shield, Users, CheckCircle2 } from 'lucide-react';
 
 interface ProfilePageProps {
   onNavigate: (page: string) => void;
 }
 
 export default function ProfilePage({ onNavigate }: ProfilePageProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
+  const [isJoining, setIsJoining] = useState(false);
+
+  const handleJoinGroup = async () => {
+    if (!user) return;
+    setIsJoining(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        joinedGroup: true
+      });
+      await refreshUser();
+    } catch (error) {
+      console.error('Failed to join group:', error);
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -144,6 +160,28 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
               <ChevronRight size={18} className="text-slate-300" />
             </button>
             <button
+              onClick={() => {
+                if (!user.joinedGroup) {
+                  window.open('https://groups.google.com/g/apptester07', '_blank');
+                  handleJoinGroup();
+                }
+              }}
+              className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${user.joinedGroup ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                  {user.joinedGroup ? <CheckCircle2 size={20} /> : <Users size={20} />}
+                </div>
+                <div className="text-left">
+                  <span className="font-semibold text-slate-700 block">Google Group</span>
+                  <span className={`text-[10px] font-bold uppercase ${user.joinedGroup ? 'text-emerald-500' : 'text-slate-400'}`}>
+                    {user.joinedGroup ? 'Joined' : 'Not Joined'}
+                  </span>
+                </div>
+              </div>
+              {!user.joinedGroup && <ChevronRight size={18} className="text-slate-300" />}
+            </button>
+            <button
               onClick={() => onNavigate('settings')}
               className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50"
             >
@@ -170,14 +208,14 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
               </button>
             )}
             <button
-              onClick={() => window.open('https://reddit.com', '_blank')}
+              onClick={() => window.open('https://groups.google.com/g/apptester07', '_blank')}
               className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
             >
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600">
-                  <Share2 size={20} />
+                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <Users size={20} />
                 </div>
-                <span className="font-semibold text-slate-700">Join Reddit Community</span>
+                <span className="font-semibold text-slate-700">Join Google Group</span>
               </div>
               <ChevronRight size={18} className="text-slate-300" />
             </button>

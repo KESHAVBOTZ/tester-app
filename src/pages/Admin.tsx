@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import { db, collection, query, onSnapshot, doc, deleteDoc, updateDoc, increment, OperationType, handleFirestoreError, getDocs, writeBatch } from '../firebase';
 import { AppModel, UserProfile } from '../types';
-import { ArrowLeft, Trash2, Shield, AlertTriangle, Users, Briefcase, Send, Edit2, Check, X, Plus, Minus, Coins } from 'lucide-react';
+import { ArrowLeft, Trash2, Shield, AlertTriangle, Users, Briefcase, Send, Edit2, Check, X, Plus, Minus, Coins, CheckCircle2 } from 'lucide-react';
 
 interface AdminPageProps {
   onBack: () => void;
@@ -251,7 +251,10 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-slate-900 truncate text-sm">{u.name}</h3>
+                      <h3 className="font-bold text-slate-900 truncate text-sm flex items-center gap-2">
+                        {u.name}
+                        {u.joinedGroup && <CheckCircle2 size={14} className="text-emerald-500" />}
+                      </h3>
                       <p className="text-slate-500 text-[10px] truncate">{u.email}</p>
                     </div>
                     {editingUser === u.uid ? (

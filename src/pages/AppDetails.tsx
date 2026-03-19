@@ -102,16 +102,21 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
         testersJoined: increment(1)
       });
 
-      // 3. Update user activity
-      await updateDoc(doc(db, 'users', user.uid), {
-        lastActiveAt: serverTimestamp()
-      });
-
-      // 4. Update developer's app activity if user is a developer
-      const developerAppsQuery = query(collection(db, 'apps'), where('developerId', '==', user.uid));
-      // This is a bit complex to update all apps, but let's at least update user's profile
-      // The system should check user's profile lastActiveAt instead of app's field if possible
-      // But for now let's stick to the requirement as interpreted.
+      // 4. Update user testing progress
+      const today = new Date().toDateString();
+      const lastTested = user.lastTestedAt ? new Date(user.lastTestedAt.toDate()).toDateString() : null;
+      
+      if (today !== lastTested) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          testingDays: increment(1),
+          lastTestedAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp()
+        });
+      } else {
+        await updateDoc(doc(db, 'users', user.uid), {
+          lastActiveAt: serverTimestamp()
+        });
+      }
 
       // 5. Open Play Store link
       window.open(app.playStoreLink, '_blank');
@@ -143,16 +148,24 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
         dailyOpens: [...(testRecord.dailyOpens || []), { toDate: () => new Date() } as any]
       });
 
-      // Update user activity
-      await updateDoc(doc(db, 'users', user.uid), {
-        lastActiveAt: serverTimestamp()
-      });
-
-      // Also update developer's apps to show they are active
-      // We'll need a way to find all apps by this developer and update their developerLastActiveAt
-      // For simplicity, let's assume the check is on the user profile or we update the apps they own.
+      // Update user testing progress
+      const today = new Date().toDateString();
+      const lastTested = user.lastTestedAt ? new Date(user.lastTestedAt.toDate()).toDateString() : null;
+      
+      if (today !== lastTested) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          testingDays: increment(1),
+          lastTestedAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp()
+        });
+      } else {
+        await updateDoc(doc(db, 'users', user.uid), {
+          lastActiveAt: serverTimestamp()
+        });
+      }
       
       window.open(app.playStoreLink, '_blank');
+      await refreshUser();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tests/${testRecord.id}`);
     } finally {

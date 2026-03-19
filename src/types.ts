@@ -8,6 +8,9 @@ export interface UserProfile {
   photoURL?: string;
   role: 'user' | 'admin';
   lastActiveAt?: Timestamp;
+  joinedGroup?: boolean;
+  testingDays?: number;
+  lastTestedAt?: Timestamp;
 }
 
 export interface AppModel {

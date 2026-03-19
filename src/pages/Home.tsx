@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { db, collection, onSnapshot, query, where, signInWithPopup, googleProvider, auth, OperationType, handleFirestoreError } from '../firebase';
 import { AppModel } from '../types';
-import { Search, ChevronRight, Coins, LogIn, Lock } from 'lucide-react';
+import { Search, ChevronRight, Coins, LogIn, Lock, Users } from 'lucide-react';
 import { useAuth } from '../App';
+import TestingDashboard from '../components/TestingDashboard';
+import WelcomeModal from '../components/WelcomeModal';
 
 interface HomePageProps {
   onSelectApp: (id: string) => void;
@@ -13,6 +15,15 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
   const [apps, setApps] = useState<AppModel[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.joinedGroup) {
+      setShowWelcome(true);
+    } else {
+      setShowWelcome(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     const q = query(collection(db, 'apps'));
@@ -54,6 +65,8 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
 
   return (
     <div className="p-6">
+      {showWelcome && user && <WelcomeModal user={user} onClose={() => setShowWelcome(false)} />}
+      
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -99,6 +112,9 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
           className="w-full bg-slate-100 border-none rounded-2xl py-4 pl-12 pr-4 text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all"
         />
       </div>
+
+      {/* Testing Dashboard */}
+      {user && user.joinedGroup && <TestingDashboard user={user} />}
 
       {/* Featured Apps */}
       <div className="mb-8 overflow-hidden">

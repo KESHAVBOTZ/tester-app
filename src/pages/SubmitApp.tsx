@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../App';
 import { db, doc, setDoc, collection, serverTimestamp, updateDoc, increment, OperationType, handleFirestoreError } from '../firebase';
-import { ArrowLeft, Upload, Info, Coins, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Info, Coins, PlusCircle, Users, AlertCircle } from 'lucide-react';
+import WelcomeModal from '../components/WelcomeModal';
 
 interface SubmitAppPageProps {
   onBack: () => void;
@@ -17,12 +18,18 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const creditsNeeded = user?.role === 'admin' ? 0 : 60; // No cost for admins
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (!user.joinedGroup) {
+      setShowWelcome(true);
+      return;
+    }
 
     if (user.role !== 'admin' && user.credits < creditsNeeded) {
       setError(`You need at least ${creditsNeeded} credits to publish an app.`);
@@ -87,6 +94,8 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
 
   return (
     <div className="p-6">
+      {showWelcome && user && <WelcomeModal user={user} onClose={() => setShowWelcome(false)} />}
+      
       <div className="flex items-center gap-4 mb-8">
         <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
           <ArrowLeft size={24} className="text-slate-900" />
@@ -109,6 +118,25 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
           </p>
         </div>
       </div>
+
+      {!user.joinedGroup && (
+        <div className="bg-orange-50 p-4 rounded-2xl mb-8 flex items-start gap-3 border border-orange-100">
+          <AlertCircle size={20} className="text-orange-600 mt-0.5" />
+          <div>
+            <p className="text-sm text-orange-900 font-bold">Google Group Required</p>
+            <p className="text-xs text-orange-700 mt-1 mb-2">
+              You must join our Google Group before you can publish an app.
+            </p>
+            <button 
+              type="button"
+              onClick={() => setShowWelcome(true)}
+              className="text-xs font-bold text-indigo-600 flex items-center gap-1"
+            >
+              Join Group Now <Users size={12} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6 pb-12">
         <div className="space-y-2">
