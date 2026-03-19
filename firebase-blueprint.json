@@ -48,6 +48,35 @@
         "feedback": { "type": "string", "description": "The feedback provided by the tester" }
       },
       "required": ["id", "userId", "appId", "startDate", "completed"]
+    },
+    "Login": {
+      "title": "Login",
+      "description": "A record of a user login event",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique ID of the user" },
+        "email": { "type": "string", "description": "The email address of the user" },
+        "name": { "type": "string", "description": "The display name of the user" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "The timestamp of the login" }
+      },
+      "required": ["uid", "email", "name", "timestamp"]
+    },
+    "CreditRequest": {
+      "title": "CreditRequest",
+      "description": "A request for credits by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique ID of the request" },
+        "userId": { "type": "string", "description": "The UID of the user requesting credits" },
+        "userName": { "type": "string", "description": "The name of the user" },
+        "userEmail": { "type": "string", "description": "The email of the user" },
+        "credits": { "type": "integer", "description": "The number of credits requested" },
+        "amount": { "type": "string", "description": "The amount paid" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "The status of the request" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the request was created" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "The timestamp when the request was updated" }
+      },
+      "required": ["id", "userId", "userName", "userEmail", "credits", "amount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -62,6 +91,14 @@
     "/tests/{testId}": {
       "schema": "Test",
       "description": "Testing records"
+    },
+    "/logins/{loginId}": {
+      "schema": "Login",
+      "description": "User login logs"
+    },
+    "/credit_requests/{requestId}": {
+      "schema": "CreditRequest",
+      "description": "User credit purchase requests"
     }
   }
 }

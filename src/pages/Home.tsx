@@ -106,63 +106,22 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
         <input
           type="text"
-          placeholder="Search for apps"
+          placeholder="Search for apps by name or developer"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-slate-100 border-none rounded-2xl py-4 pl-12 pr-4 text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all"
+          className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
         />
-      </div>
-
-      {/* Testing Dashboard */}
-      {user && user.joinedGroup && <TestingDashboard user={user} />}
-
-      {/* Featured Apps */}
-      <div className="mb-8 overflow-hidden">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-1">Featured Apps</h2>
-        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-6 px-6">
-          {filteredApps.slice(0, 3).map((app) => (
-            <button
-              key={app.id}
-              onClick={() => onSelectApp(app.id)}
-              className={`flex-shrink-0 w-48 rounded-3xl p-5 text-left text-white shadow-xl active:scale-95 transition-transform relative overflow-hidden ${
-                isInactive(app) ? 'bg-slate-400 shadow-slate-100 grayscale' : 'bg-gradient-to-br from-indigo-600 to-violet-700 shadow-indigo-100'
-              }`}
-            >
-              {isInactive(app) && (
-                <div className="absolute top-2 right-2 bg-white/20 p-1 rounded-full">
-                  <Lock size={12} />
-                </div>
-              )}
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl mb-4 flex items-center justify-center text-xl font-bold border border-white/20">
-                {app.iconUrl ? (
-                  <img src={app.iconUrl} alt={app.name} className={`w-full h-full object-cover rounded-2xl ${isInactive(app) ? 'grayscale' : ''}`} referrerPolicy="no-referrer" />
-                ) : (
-                  app.name[0]
-                )}
-              </div>
-              <h3 className="font-bold text-sm truncate mb-1">{app.name}</h3>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-100">
-                  <Coins size={12} />
-                  {app.credits}
-                </div>
-                <div className="text-[10px] text-indigo-200">
-                  {app.testersJoined}/{app.testersRequired}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* App List */}
       <div className="space-y-4">
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-1">All Apps</h2>
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-600"></div>
           </div>
         ) : filteredApps.length > 0 ? (
-          filteredApps.map((app) => (
+          filteredApps.map((app, index) => (
             <button
               key={app.id}
               onClick={() => onSelectApp(app.id)}
@@ -170,6 +129,9 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
                 isInactive(app) ? 'opacity-60 border-slate-100' : 'border-slate-100 hover:border-indigo-100'
               }`}
             >
+              <div className="text-slate-400 font-mono text-xs w-6 flex-shrink-0">
+                {String(index + 1).padStart(2, '0')}
+              </div>
               <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-50 relative">
                 {app.iconUrl ? (
                   <img src={app.iconUrl} alt={app.name} className={`w-full h-full object-cover ${isInactive(app) ? 'grayscale' : ''}`} referrerPolicy="no-referrer" />

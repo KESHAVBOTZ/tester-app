@@ -10,6 +10,10 @@ import AppDetailsPage from './pages/AppDetails';
 import SettingsPage from './pages/Settings';
 import PricingPage from './pages/Pricing';
 import AdminPage from './pages/Admin';
+import ProfileEditPage from './pages/ProfileEdit';
+import CreditPage from './pages/Credit';
+import { addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection as firestoreCollection } from 'firebase/firestore';
 
 // Auth Context
 interface AuthContextType {
@@ -61,6 +65,25 @@ export default function App() {
             }
             
             setUser(userData);
+            
+            // Log login
+            const lastLoginKey = `last_login_${firebaseUser.uid}`;
+            const lastLogin = localStorage.getItem(lastLoginKey);
+            const today = new Date().toDateString();
+            
+            if (lastLogin !== today) {
+              try {
+                await addDoc(firestoreCollection(db, 'logins'), {
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email || '',
+                  name: firebaseUser.displayName || 'Anonymous',
+                  timestamp: serverTimestamp()
+                });
+                localStorage.setItem(lastLoginKey, today);
+              } catch (e) {
+                handleFirestoreError(e, OperationType.WRITE, 'logins');
+              }
+            }
           } else {
             // Create new user profile if it doesn't exist
             const newUser: UserProfile = {
@@ -137,11 +160,13 @@ export default function App() {
             <AppDetailsPage appId={selectedAppId} onBack={() => navigateTo('home')} />
           )}
           {currentPage === 'settings' && <SettingsPage onBack={() => navigateTo('profile')} />}
-          {currentPage === 'pricing' && <PricingPage onBack={() => navigateTo('profile')} />}
+          {currentPage === 'pricing' && <PricingPage onBack={() => navigateTo('profile')} onNavigate={navigateTo} />}
+          {currentPage === 'credit' && <CreditPage onBack={() => navigateTo('profile')} />}
           {currentPage === 'admin' && <AdminPage onBack={() => navigateTo('profile')} onSelectApp={(id) => navigateTo('details', id)} onNavigate={navigateTo} />}
+          {currentPage === 'profile-edit' && <ProfileEditPage onBack={() => navigateTo('profile')} />}
 
           {/* Bottom Navigation */}
-          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-50">
+          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-100 px-6 py-3 flex justify-around items-center z-50">
             <button
               onClick={() => navigateTo('home')}
               className={`flex flex-col items-center gap-1 ${currentPage === 'home' ? 'text-indigo-600' : 'text-slate-400'}`}
@@ -150,20 +175,21 @@ export default function App() {
               <span className="text-[10px] font-medium">Home</span>
             </button>
             
-            {user?.role === 'admin' ? (
+            <button
+              onClick={() => navigateTo('submit')}
+              className={`flex flex-col items-center gap-1 ${currentPage === 'submit' ? 'text-indigo-600' : 'text-slate-400'}`}
+            >
+              <PlusCircle size={24} />
+              <span className="text-[10px] font-medium">Submit</span>
+            </button>
+
+            {user?.role === 'admin' && (
               <button
                 onClick={() => navigateTo('admin')}
                 className={`flex flex-col items-center gap-1 ${currentPage === 'admin' ? 'text-indigo-600' : 'text-slate-400'}`}
               >
                 <Shield size={24} />
-                <span className="text-[10px] font-medium">Dashboard</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => navigateTo('submit')}
-                className="absolute -top-6 left-1/2 -translate-x-1/2 bg-indigo-600 text-white p-4 rounded-full shadow-lg shadow-indigo-200 active:scale-95 transition-transform"
-              >
-                <PlusCircle size={32} />
+                <span className="text-[10px] font-medium">Admin</span>
               </button>
             )}
 

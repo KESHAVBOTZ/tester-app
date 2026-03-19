@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useAuth } from '../App';
-import { db, doc, updateDoc, increment, OperationType, handleFirestoreError } from '../firebase';
+import { db, doc, setDoc, serverTimestamp, OperationType, handleFirestoreError } from '../firebase';
 import { ArrowLeft, Coins, Check, Zap, Shield, Star } from 'lucide-react';
 
 interface PricingPageProps {
   onBack: () => void;
+  onNavigate: (page: string) => void;
 }
 
-export default function PricingPage({ onBack }: PricingPageProps) {
-  const { user, refreshUser } = useAuth();
+export default function PricingPage({ onBack, onNavigate }: PricingPageProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
 
   const plans = [
@@ -42,24 +43,30 @@ export default function PricingPage({ onBack }: PricingPageProps) {
     }
   ];
 
-  const handleBuy = async (planId: string, credits: number) => {
+  const handleBuy = async (planId: string, credits: number, amount: string) => {
     if (!user) return;
     setLoading(planId);
 
     try {
-      // Simulate payment delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Add credits to user
-      await updateDoc(doc(db, 'users', user.uid), {
-        credits: increment(credits)
+      const requestId = Math.random().toString(36).substring(2, 15);
+      await setDoc(doc(db, 'credit_requests', requestId), {
+        id: requestId,
+        userId: user.uid,
+        userName: user.name,
+        userEmail: user.email,
+        credits: credits,
+        amount: amount,
+        status: 'pending',
+        createdAt: serverTimestamp()
       });
 
-      await refreshUser();
-      alert(`Successfully added ${credits} credits to your account!`);
+      // Show a brief success state before redirecting
+      setLoading('redirecting');
+      setTimeout(() => {
+        onNavigate('credit');
+      }, 1500);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-    } finally {
+      handleFirestoreError(error, OperationType.WRITE, 'credit_requests');
       setLoading(null);
     }
   };
@@ -126,7 +133,7 @@ export default function PricingPage({ onBack }: PricingPageProps) {
             </div>
 
             <button
-              onClick={() => handleBuy(plan.id, plan.credits)}
+              onClick={() => handleBuy(plan.id, plan.credits, plan.price)}
               disabled={loading !== null}
               className={`w-full py-4 rounded-2xl font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
                 plan.color === 'indigo' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' :
@@ -134,7 +141,12 @@ export default function PricingPage({ onBack }: PricingPageProps) {
                 'bg-slate-900 text-white shadow-lg shadow-slate-100'
               }`}
             >
-              {loading === plan.id ? (
+              {loading === 'redirecting' ? (
+                <div className="flex items-center gap-2">
+                  <Check size={18} />
+                  Redirecting...
+                </div>
+              ) : loading === plan.id ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
               ) : (
                 <>

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
-import { db, collection, query, onSnapshot, doc, deleteDoc, updateDoc, increment, OperationType, handleFirestoreError, getDocs, writeBatch } from '../firebase';
+import { db, collection, query, onSnapshot, doc, deleteDoc, updateDoc, increment, OperationType, handleFirestoreError, getDocs, writeBatch, serverTimestamp } from '../firebase';
 import { AppModel, UserProfile } from '../types';
-import { ArrowLeft, Trash2, Shield, AlertTriangle, Users, Briefcase, Send, Edit2, Check, X, Plus, Minus, Coins, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Trash2, Shield, AlertTriangle, Users, Briefcase, Send, Edit2, Check, X, Plus, Minus, Coins, CheckCircle2, BarChart2, Clock, TrendingUp, CreditCard } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts';
 
 interface AdminPageProps {
   onBack: () => void;
@@ -10,12 +11,13 @@ interface AdminPageProps {
   onNavigate: (page: string) => void;
 }
 
-type AdminTab = 'apps' | 'users' | 'tools';
+type AdminTab = 'apps' | 'users' | 'credits' | 'tools' | 'analytics';
 
 export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPageProps) {
   const { user } = useAuth();
   const [apps, setApps] = useState<AppModel[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [creditRequests, setCreditRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AdminTab>('apps');
   
@@ -24,10 +26,14 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
   const [editAppData, setEditAppData] = useState<Partial<AppModel>>({});
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editUserCredits, setEditUserCredits] = useState<number>(0);
+  const [editUserRole, setEditUserRole] = useState<'user' | 'admin'>('user');
+  const [userSearch, setUserSearch] = useState('');
   
   // Mass Send State
   const [massCredits, setMassCredits] = useState<number>(0);
   const [isSendingMass, setIsSendingMass] = useState(false);
+  const [logins, setLogins] = useState<any[]>([]);
+  const [testRecords, setTestRecords] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
@@ -51,11 +57,89 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
       handleFirestoreError(error, OperationType.GET, 'users');
     });
 
+    // Listen to Credit Requests
+    const creditQuery = query(collection(db, 'credit_requests'));
+    const unsubscribeCredits = onSnapshot(creditQuery, (snapshot) => {
+      const creditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCreditRequests(creditsData.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis() || 0;
+        const timeB = b.createdAt?.toMillis() || 0;
+        return timeB - timeA;
+      }));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'credit_requests');
+    });
+
     return () => {
       unsubscribeApps();
       unsubscribeUsers();
+      unsubscribeCredits();
     };
   }, [user]);
+
+  const handleApproveCredit = async (request: any) => {
+    try {
+      const batch = writeBatch(db);
+      
+      // Update request status
+      batch.update(doc(db, 'credit_requests', request.id), {
+        status: 'approved',
+        updatedAt: serverTimestamp()
+      });
+      
+      // Add credits to user
+      batch.update(doc(db, 'users', request.userId), {
+        credits: increment(request.credits)
+      });
+      
+      await batch.commit();
+      alert(`Approved ${request.credits} credits for ${request.userName}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `credit_requests/${request.id}`);
+    }
+  };
+
+  const handleRejectCredit = async (requestId: string) => {
+    try {
+      await updateDoc(doc(db, 'credit_requests', requestId), {
+        status: 'rejected',
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `credit_requests/${requestId}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || activeTab !== 'analytics') return;
+
+    const loginsQuery = query(collection(db, 'logins'));
+    const unsubscribeLogins = onSnapshot(loginsQuery, (snapshot) => {
+      const loginsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort by timestamp descending
+      loginsData.sort((a: any, b: any) => {
+        const timeA = a.timestamp?.toMillis() || 0;
+        const timeB = b.timestamp?.toMillis() || 0;
+        return timeB - timeA;
+      });
+      setLogins(loginsData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'logins');
+    });
+
+    const testsQuery = query(collection(db, 'tests'));
+    const unsubscribeTests = onSnapshot(testsQuery, (snapshot) => {
+      const testsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTestRecords(testsData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'tests');
+    });
+
+    return () => {
+      unsubscribeLogins();
+      unsubscribeTests();
+    };
+  }, [user, activeTab]);
 
   const handleDeleteApp = async (appId: string) => {
     if (!window.confirm('Are you sure you want to delete this app?')) return;
@@ -75,9 +159,12 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
     }
   };
 
-  const handleUpdateUserCredits = async (userId: string) => {
+  const handleUpdateUser = async (userId: string) => {
     try {
-      await updateDoc(doc(db, 'users', userId), { credits: editUserCredits });
+      await updateDoc(doc(db, 'users', userId), { 
+        credits: editUserCredits,
+        role: editUserRole
+      });
       setEditingUser(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
@@ -104,6 +191,112 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
       setIsSendingMass(false);
     }
   };
+
+  const loginStats = useMemo(() => {
+    const byDay: Record<string, number> = {};
+    const byUser: Record<string, { name: string, email: string, count: number }> = {};
+
+    logins.forEach(login => {
+      // By Day
+      const date = login.timestamp?.toDate().toLocaleDateString() || 'Unknown';
+      byDay[date] = (byDay[date] || 0) + 1;
+
+      // By User
+      const uid = login.uid;
+      if (!byUser[uid]) {
+        byUser[uid] = {
+          name: login.name || 'Anonymous',
+          email: login.email || 'No Email',
+          count: 0
+        };
+      }
+      byUser[uid].count += 1;
+    });
+
+    const chartData = Object.entries(byDay).map(([date, count]) => ({
+      date,
+      count
+    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const topUsers = Object.values(byUser).sort((a, b) => b.count - a.count);
+
+    return { chartData, topUsers };
+  }, [logins]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => 
+      u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(userSearch.toLowerCase())
+    );
+  }, [users, userSearch]);
+
+  const userStats = useMemo(() => {
+    const admins = users.filter(u => u.role === 'admin').length;
+    return { admins, total: users.length };
+  }, [users]);
+
+  const testingStats = useMemo(() => {
+    const totalTests = testRecords.length;
+    const completedTests = testRecords.filter(t => t.completed).length;
+    const completionRate = totalTests > 0 ? (completedTests / totalTests) * 100 : 0;
+    
+    const appsWithTests = new Set(testRecords.map(t => t.appId)).size;
+    
+    let totalDuration = 0;
+    let completedWithDuration = 0;
+    
+    testRecords.forEach(t => {
+      if (t.completed && t.completedAt && t.startDate) {
+        const duration = t.completedAt.toMillis() - t.startDate.toMillis();
+        totalDuration += duration;
+        completedWithDuration++;
+      }
+    });
+    
+    const avgDurationMs = completedWithDuration > 0 ? totalDuration / completedWithDuration : 0;
+    const avgDurationDays = (avgDurationMs / (1000 * 60 * 60 * 24)).toFixed(1);
+
+    // Completion trend
+    const byDay: Record<string, number> = {};
+    testRecords.forEach(t => {
+      if (t.completed && t.completedAt) {
+        const date = t.completedAt.toDate().toLocaleDateString();
+        byDay[date] = (byDay[date] || 0) + 1;
+      }
+    });
+
+    const trendData = Object.entries(byDay).map(([date, count]) => ({
+      date,
+      count
+    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Top apps by testers
+    const appTesters: Record<string, number> = {};
+    testRecords.forEach(t => {
+      appTesters[t.appId] = (appTesters[t.appId] || 0) + 1;
+    });
+
+    const topAppsData = Object.entries(appTesters)
+      .map(([appId, count]) => {
+        const app = apps.find(a => a.id === appId);
+        return {
+          name: app?.name || 'Unknown',
+          count
+        };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      totalTests,
+      completedTests,
+      completionRate: completionRate.toFixed(1),
+      appsWithTests,
+      avgDurationDays,
+      trendData,
+      topAppsData
+    };
+  }, [testRecords, apps]);
 
   if (!user || user.role !== 'admin') {
     return (
@@ -152,11 +345,25 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
           Users
         </button>
         <button
+          onClick={() => setActiveTab('credits')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${activeTab === 'credits' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+        >
+          <CreditCard size={18} />
+          Credits
+        </button>
+        <button
           onClick={() => setActiveTab('tools')}
           className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${activeTab === 'tools' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
         >
           <Send size={18} />
           Tools
+        </button>
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${activeTab === 'analytics' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+        >
+          <BarChart2 size={18} />
+          Stats
         </button>
       </div>
 
@@ -237,60 +444,186 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
 
           {activeTab === 'users' && (
             <div className="space-y-4">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Manage Users ({users.length})</h2>
-              {users.map((u) => (
-                <div key={u.uid} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0">
-                      {u.photoURL ? (
-                        <img src={u.photoURL} alt={u.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-600 font-bold">
-                          {u.name[0]}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-slate-900 truncate text-sm flex items-center gap-2">
-                        {u.name}
-                        {u.joinedGroup && <CheckCircle2 size={14} className="text-emerald-500" />}
-                      </h3>
-                      <p className="text-slate-500 text-[10px] truncate">{u.email}</p>
-                    </div>
+              <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-2xl mb-4">
+                <Users size={18} className="text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="bg-transparent border-none text-sm w-full focus:ring-0"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Total Users</p>
+                  <p className="text-xl font-bold text-indigo-900">{userStats.total}</p>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Admins</p>
+                  <p className="text-xl font-bold text-emerald-900">{userStats.admins}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {filteredUsers.map((u) => (
+                  <div key={u.uid} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
                     {editingUser === u.uid ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={editUserCredits}
-                          onChange={(e) => setEditUserCredits(parseInt(e.target.value))}
-                          className="w-20 bg-slate-50 border-none rounded-lg p-2 text-xs font-bold"
-                        />
-                        <button onClick={() => handleUpdateUserCredits(u.uid)} className="p-2 bg-indigo-600 text-white rounded-lg">
-                          <Check size={14} />
-                        </button>
-                        <button onClick={() => setEditingUser(null)} className="p-2 bg-slate-100 text-slate-600 rounded-lg">
-                          <X size={14} />
-                        </button>
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+                            {u.name[0]}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{u.name}</p>
+                            <p className="text-[10px] text-slate-500">{u.email}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Credits</label>
+                            <input
+                              type="number"
+                              value={editUserCredits}
+                              onChange={(e) => setEditUserCredits(parseInt(e.target.value))}
+                              className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Role</label>
+                            <select
+                              value={editUserRole}
+                              onChange={(e) => setEditUserRole(e.target.value as 'user' | 'admin')}
+                              className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold"
+                            >
+                              <option value="user">User</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleUpdateUser(u.uid)} 
+                            className="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                          >
+                            <Check size={16} /> Save Changes
+                          </button>
+                          <button 
+                            onClick={() => setEditingUser(null)} 
+                            className="flex-1 bg-slate-100 text-slate-600 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                          >
+                            <X size={16} /> Cancel
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="flex items-center gap-1 text-orange-600 font-bold text-sm">
-                            <Coins size={14} />
-                            {u.credits}
-                          </div>
-                          <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-500'}`}>
-                            {u.role}
-                          </span>
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-indigo-600 font-bold border border-slate-100">
+                          {u.photoURL ? (
+                            <img src={u.photoURL} alt={u.name} className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            u.name[0]
+                          )}
                         </div>
-                        <button onClick={() => { setEditingUser(u.uid); setEditUserCredits(u.credits); }} className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg">
-                          <Edit2 size={16} />
-                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-slate-900 truncate text-sm">{u.name}</h3>
+                            {u.role === 'admin' && (
+                              <span className="bg-indigo-50 text-indigo-600 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Admin</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-500 text-[10px]">
+                            <span className="truncate">{u.email}</span>
+                            <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                            <span className="font-bold text-slate-700">{u.credits} Credits</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await updateDoc(doc(db, 'users', u.uid), { credits: increment(100) });
+                                alert(`Sent 100 credits to ${u.name}`);
+                              } catch (e) {
+                                handleFirestoreError(e, OperationType.UPDATE, `users/${u.uid}`);
+                              }
+                            }}
+                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
+                            title="Send 100 Credits"
+                          >
+                            <Plus size={18} />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingUser(u.uid);
+                              setEditUserCredits(u.credits);
+                              setEditUserRole(u.role);
+                            }} 
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'credits' && (
+            <div className="space-y-4">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Credit Requests ({creditRequests.length})</h2>
+              {creditRequests.map((req) => (
+                <div key={req.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-slate-900">{req.credits} Credits</h3>
+                          <p className="text-slate-500 text-xs">{req.amount} • {req.userName}</p>
+                          <p className="text-slate-400 text-[10px]">{req.userEmail}</p>
+                        </div>
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          req.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                          req.status === 'rejected' ? 'bg-red-50 text-red-600' :
+                          'bg-orange-50 text-orange-600'
+                        }`}>
+                          {req.status}
+                        </div>
+                      </div>
+                      
+                      {req.status === 'pending' && (
+                        <div className="flex gap-2 mt-4">
+                          <button 
+                            onClick={() => handleApproveCredit(req)}
+                            className="flex-1 bg-emerald-600 text-white py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                          >
+                            <Check size={14} /> Confirm & Approve
+                          </button>
+                          <button 
+                            onClick={() => handleRejectCredit(req.id)}
+                            className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                          >
+                            <X size={14} /> Reject
+                          </button>
+                        </div>
+                      )}
+                  
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 mt-3 pt-3 border-t border-slate-50">
+                    <span>ID: {req.id}</span>
+                    <span>{req.createdAt?.toDate().toLocaleDateString()}</span>
+                  </div>
                 </div>
               ))}
+              {creditRequests.length === 0 && (
+                <div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                  <Clock size={32} className="mx-auto text-slate-300 mb-3" />
+                  <p className="text-slate-500 text-sm font-medium">No credit requests found</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -345,6 +678,213 @@ export default function AdminPage({ onBack, onSelectApp, onNavigate }: AdminPage
                 <p className="text-indigo-700 text-sm leading-relaxed">
                   Use the mass distribution tool sparingly to maintain the value of credits in the ecosystem. Credits are primarily earned by testing apps.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-6">
+              {/* Login Analytics */}
+              <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                    <BarChart2 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Login Analytics</h3>
+                    <p className="text-slate-500 text-xs">Tracking user activity and logins.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Logins</p>
+                      <p className="text-xl font-bold text-slate-900">{logins.length}</p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Unique Users</p>
+                      <p className="text-xl font-bold text-slate-900">{new Set(logins.map(l => l.uid)).size}</p>
+                    </div>
+                  </div>
+
+                  {/* Chart */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-64">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Login Activity (Daily)</p>
+                    <ResponsiveContainer width="100%" height="80%">
+                      <AreaChart data={loginStats.chartData}>
+                        <defs>
+                          <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                            <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="date" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#94a3b8' }}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#94a3b8' }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Area type="monotone" dataKey="count" stroke="#4f46e5" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Top Users */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-1">Logins by User</h4>
+                    <div className="space-y-3">
+                      {loginStats.topUsers.map((u, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold">
+                              {u.name[0]}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{u.name}</p>
+                              <p className="text-[10px] text-slate-500">{u.email}</p>
+                            </div>
+                          </div>
+                          <div className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg text-xs font-bold">
+                            {u.count} logins
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-1">Recent Logins</h4>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                      {logins.map((login) => (
+                        <div key={login.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">
+                              {login.name?.[0] || 'U'}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{login.name}</p>
+                              <p className="text-[10px] text-slate-500">{login.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 text-slate-400">
+                            <Clock size={12} />
+                            <span className="text-[10px] font-medium">
+                              {login.timestamp?.toDate().toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {logins.length === 0 && (
+                        <p className="text-center py-8 text-slate-400 text-xs italic">No login data available yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Testing Analytics */}
+              <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Testing Statistics</h3>
+                    <p className="text-slate-500 text-xs">Performance and completion metrics.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Apps Tested</p>
+                      <p className="text-lg font-bold text-slate-900">{testingStats.appsWithTests}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Avg Time</p>
+                      <p className="text-lg font-bold text-slate-900">{testingStats.avgDurationDays}d</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Completion</p>
+                      <p className="text-lg font-bold text-slate-900">{testingStats.completionRate}%</p>
+                    </div>
+                  </div>
+
+                  {/* Trend Chart */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-64">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Test Completions (Daily)</p>
+                    <ResponsiveContainer width="100%" height="80%">
+                      <AreaChart data={testingStats.trendData}>
+                        <defs>
+                          <linearGradient id="colorCompletions" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="date" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#94a3b8' }}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#94a3b8' }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Area type="monotone" dataKey="count" stroke="#10b981" fillOpacity={1} fill="url(#colorCompletions)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Top Apps Chart */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-64">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Top Apps by Testers</p>
+                    <ResponsiveContainer width="100%" height="80%">
+                      <BarChart data={testingStats.topAppsData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                        <XAxis type="number" hide />
+                        <YAxis 
+                          dataKey="name" 
+                          type="category" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#94a3b8' }}
+                          width={80}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Total Tests</p>
+                      <p className="text-2xl font-bold text-emerald-900">{testingStats.totalTests}</p>
+                    </div>
+                    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                      <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Completed</p>
+                      <p className="text-2xl font-bold text-indigo-900">{testingStats.completedTests}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -15,6 +15,8 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
   const [playStoreLink, setPlayStoreLink] = useState('');
   const [testersRequired, setTestersRequired] = useState(12);
   const [iconUrl, setIconUrl] = useState('');
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +24,48 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
 
   const creditsNeeded = user?.role === 'admin' ? 0 : 60; // No cost for admins
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (file.type !== 'image/png') {
+      setError('Only PNG images are allowed for the logo.');
+      return;
+    }
+
+    // Validate file size (1MB = 1024 * 1024 bytes)
+    if (file.size > 1024 * 1024) {
+      setError('Logo file size must be less than 1MB.');
+      return;
+    }
+
+    setError(null);
+    setIconFile(file);
+    setIconUrl(''); // Clear URL if file is selected
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setIconPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const validateUrl = (url: string) => {
+    if (!url) return true;
+    const isPng = url.toLowerCase().endsWith('.png') || url.toLowerCase().includes('.png?');
+    if (!isPng) {
+      setError('Logo URL must point to a PNG image.');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (iconUrl && !validateUrl(iconUrl)) return;
 
     if (!user.joinedGroup) {
       setShowWelcome(true);
@@ -53,7 +94,7 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
         testersRequired,
         testersJoined: 0,
         credits: 20, // Credits awarded to testers
-        iconUrl: iconUrl || `https://picsum.photos/seed/${name}/200/200`,
+        iconUrl: iconPreview || iconUrl || `https://picsum.photos/seed/${name}/200/200`,
         description,
         createdAt: serverTimestamp(),
         testingTime: 14,
@@ -241,21 +282,48 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-bold text-slate-700 ml-1">App Icon URL (Optional)</label>
-          <div className="flex gap-4 items-center">
-            <input
-              type="url"
-              value={iconUrl}
-              onChange={(e) => setIconUrl(e.target.value)}
-              placeholder="https://example.com/icon.png"
-              className="flex-1 bg-white border border-slate-200 rounded-2xl py-4 px-4 text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all"
-            />
-            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 overflow-hidden">
-              {iconUrl ? (
-                <img src={iconUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <Upload size={20} />
-              )}
+          <label className="text-sm font-bold text-slate-700 ml-1">App Logo (PNG, less than 1MB)</label>
+          <div className="space-y-4">
+            {/* File Upload */}
+            <div className="flex items-center gap-4">
+              <label className="flex-1 cursor-pointer">
+                <div className="w-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl py-8 flex flex-col items-center justify-center gap-2 hover:bg-slate-100 transition-all">
+                  <Upload size={24} className="text-slate-400" />
+                  <span className="text-xs font-bold text-slate-500">
+                    {iconFile ? iconFile.name : 'Click to upload PNG logo'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Max size: 1MB</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/png"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
+              <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 overflow-hidden flex-shrink-0">
+                {iconPreview || iconUrl ? (
+                  <img src={iconPreview || iconUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <Upload size={24} />
+                )}
+              </div>
+            </div>
+
+            {/* URL Input */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Or provide a PNG URL</p>
+              <input
+                type="url"
+                value={iconUrl}
+                onChange={(e) => {
+                  setIconUrl(e.target.value);
+                  setIconFile(null);
+                  setIconPreview(null);
+                }}
+                placeholder="https://example.com/icon.png"
+                className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-4 text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-all"
+              />
             </div>
           </div>
         </div>

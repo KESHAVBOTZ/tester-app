@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, ExternalLink, CheckCircle2, ChevronRight, Info, Copy } from 'lucide-react';
+import { Users, ExternalLink, CheckCircle2, ChevronRight, Info, Copy, X } from 'lucide-react';
 import { db, doc, updateDoc } from '../firebase';
 import { UserProfile } from '../types';
 
@@ -11,6 +11,9 @@ interface WelcomeModalProps {
 export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
   const [step, setStep] = React.useState(1);
   const [isJoining, setIsJoining] = React.useState(false);
+  const [showHowTo, setShowHowTo] = React.useState(false);
+  const [hasJoined, setHasJoined] = React.useState(false);
+  const [hasCopied, setHasCopied] = React.useState(false);
 
   const handleJoin = async () => {
     setIsJoining(true);
@@ -33,7 +36,42 @@ export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300 max-h-[90vh] flex flex-col">
+      <div className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300 max-h-[90vh] flex flex-col relative">
+        {showHowTo && (
+          <div className="absolute inset-0 z-50 bg-white p-8 overflow-y-auto animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900">How to Join</h3>
+              <button 
+                onClick={() => setShowHowTo(false)}
+                className="text-slate-400 hover:text-slate-600 p-2"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-6 text-sm text-slate-600 leading-relaxed">
+              <div className="space-y-2">
+                <p className="font-bold text-indigo-600">Step 1: Join Group</p>
+                <p>Click the "Join Google Group" button. It will open a new tab. Click the blue "Join Group" button on the Google Groups page.</p>
+              </div>
+              <div className="space-y-2">
+                <p className="font-bold text-indigo-600">Step 2: Add to Console</p>
+                <p>Copy the group email: <span className="font-mono bg-slate-100 px-1 rounded text-xs">apptester07@googlegroups.com</span></p>
+                <p>Go to your Google Play Console, navigate to "Closed Testing", and add this email to your "Testers" list.</p>
+              </div>
+              <div className="space-y-2">
+                <p className="font-bold text-indigo-600">Step 3: Verify</p>
+                <p>Once you've done both, click "Finish & Start" to unlock the platform.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowHowTo(false)}
+              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold mt-8"
+            >
+              Got it!
+            </button>
+          </div>
+        )}
+
         <div className="p-8 overflow-y-auto">
           {step === 1 && (
             <div className="text-center">
@@ -75,20 +113,25 @@ export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
                   href="https://groups.google.com/g/apptester07" 
                   target="_blank" 
                   rel="noopener noreferrer"
+                  onClick={() => setHasJoined(true)}
                   className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
                 >
                   <ExternalLink size={14} /> Join Google Group
                 </a>
-                <button className="flex-1 bg-sky-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm">
+                <button 
+                  onClick={() => setShowHowTo(true)}
+                  className="flex-1 bg-sky-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
+                >
                   <Info size={14} /> How-to
                 </button>
               </div>
 
-              <p className="text-[10px] text-red-500 mb-6 text-center">Oops! Please complete this step before moving on.</p>
+              {!hasJoined && <p className="text-[10px] text-red-500 mb-6 text-center">Oops! Please complete this step before moving on.</p>}
 
               <button
                 onClick={() => setStep(3)}
-                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all"
+                disabled={!hasJoined}
+                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all disabled:opacity-50"
               >
                 Next Step
               </button>
@@ -104,7 +147,7 @@ export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
               
               <div className="bg-slate-50 rounded-2xl p-4 mb-6">
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Copy our tester google group and add it to your app's google group testing list in the Play Console
+                  Copy our tester google group email below and paste it into your app's "Testers" list in the Google Play Console. This allows our 12 real testers to access your app.
                 </p>
               </div>
 
@@ -113,7 +156,10 @@ export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
                   apptester07@googlegroups.com
                 </p>
                 <button 
-                  onClick={() => copyToClipboard('apptester07@googlegroups.com')}
+                  onClick={() => {
+                    copyToClipboard('apptester07@googlegroups.com');
+                    setHasCopied(true);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-indigo-600 transition-colors"
                 >
                   <Copy size={16} />
@@ -130,16 +176,19 @@ export default function WelcomeModal({ user, onClose }: WelcomeModalProps) {
                 >
                   <ExternalLink size={14} /> Go to Console
                 </a>
-                <button className="flex-1 bg-sky-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm">
+                <button 
+                  onClick={() => setShowHowTo(true)}
+                  className="flex-1 bg-sky-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
+                >
                   <Info size={14} /> How-to
                 </button>
               </div>
 
-              <p className="text-[10px] text-red-500 mb-6 text-center">Oops! Please complete this step before moving on.</p>
+              {!hasCopied && <p className="text-[10px] text-red-500 mb-6 text-center">Oops! Please complete this step before moving on.</p>}
 
               <button
                 onClick={handleJoin}
-                disabled={isJoining}
+                disabled={isJoining || !hasCopied}
                 className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all disabled:opacity-50"
               >
                 {isJoining ? 'Verifying...' : 'Finish & Start'}
