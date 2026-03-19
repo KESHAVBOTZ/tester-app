@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (UID)
+    // Fields:
+    //   - uid: string (required) - The unique ID of the user
+    //   - name: string (required) - The display name of the user
+    //   - email: string (required) - The email address of the user
+    //   - credits: number (required) - The number of credits the user has
+    //   - photoURL: string (optional) - The URL of the user's profile picture
+    //   - role: string (required) - The role of the user (user/admin)
+    //
+    // Collection: apps
+    // Document ID: appId
+    // Fields:
+    //   - id: string (required) - The unique ID of the app
+    //   - name: string (required) - The name of the app
+    //   - developerId: string (required) - The UID of the developer
+    //   - developerName: string (required) - The name of the developer
+    //   - iconUrl: string (optional) - The URL of the app's icon
+    //   - playStoreLink: string (required) - The link to the app on the Play Store
+    //   - credits: number (required) - The number of credits awarded for testing
+    //   - testersRequired: number (required) - The total number of testers needed
+    //   - testersJoined: number (required) - The number of testers who have joined
+    //   - createdAt: timestamp (required) - The timestamp when the app was submitted
+    //   - description: string (optional) - The description of the app
+    //   - testingTime: number (optional) - The number of days required for testing
+    //
+    // Collection: tests
+    // Document ID: testId
+    // Fields:
+    //   - id: string (required) - The unique ID of the test record
+    //   - userId: string (required) - The UID of the user testing the app
+    //   - appId: string (required) - The ID of the app being tested
+    //   - startDate: timestamp (required) - The timestamp when the test started
+    //   - completed: bool (required) - Whether the test has been completed
+    //   - completedAt: timestamp (optional) - The timestamp when the test was completed
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "keshavrajlkr7@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'name', 'email', 'credits', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.credits is number &&
+             data.role in ['user', 'admin'] &&
+             isValidEmail(data.email);
+    }
+
+    function isValidApp(data) {
+      return hasRequiredFields(['id', 'name', 'developerId', 'developerName', 'playStoreLink', 'credits', 'testersRequired', 'testersJoined', 'createdAt']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.developerId == request.auth.uid &&
+             data.credits is number && data.credits >= 0 &&
+             data.testersRequired is number && data.testersRequired > 0 &&
+             data.testersJoined is number && data.testersJoined >= 0;
+    }
+
+    function isValidTest(data) {
+      return hasRequiredFields(['id', 'userId', 'appId', 'startDate', 'completed']) &&
+             data.id is string &&
+             data.userId == request.auth.uid &&
+             data.appId is string &&
+             data.completed is bool &&
+             (!('feedback' in data) || (data.feedback is string && data.feedback.size() < 1000));
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        (request.auth.token.email == "keshavrajlkr7@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin())) || isAdmin();
+    }
+
+    match /apps/{appId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidApp(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.developerId == request.auth.uid && isValidApp(request.resource.data)) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testersJoined']) && request.resource.data.testersJoined == resource.data.testersJoined + 1) ||
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (resource.data.developerId == request.auth.uid || isAdmin());
+    }
+
+    match /tests/{testId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTest(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid && isValidTest(request.resource.data)) || isAdmin();
+    }
+  }
+}

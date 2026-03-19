@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the AppTest Hub community",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique ID of the user" },
+        "name": { "type": "string", "description": "The display name of the user" },
+        "email": { "type": "string", "description": "The email address of the user" },
+        "credits": { "type": "integer", "description": "The number of credits the user has" },
+        "photoURL": { "type": "string", "description": "The URL of the user's profile picture" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "The role of the user" }
+      },
+      "required": ["uid", "name", "email", "credits", "role"]
+    },
+    "App": {
+      "title": "App",
+      "description": "An app submitted for testing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique ID of the app" },
+        "name": { "type": "string", "description": "The name of the app" },
+        "developerId": { "type": "string", "description": "The UID of the developer who submitted the app" },
+        "developerName": { "type": "string", "description": "The name of the developer" },
+        "iconUrl": { "type": "string", "description": "The URL of the app's icon" },
+        "playStoreLink": { "type": "string", "description": "The link to the app on the Play Store" },
+        "credits": { "type": "integer", "description": "The number of credits awarded for testing this app" },
+        "testersRequired": { "type": "integer", "description": "The total number of testers needed" },
+        "testersJoined": { "type": "integer", "description": "The number of testers who have joined" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the app was submitted" },
+        "description": { "type": "string", "description": "The description of the app" },
+        "testingTime": { "type": "integer", "description": "The number of days required for testing" }
+      },
+      "required": ["id", "name", "developerId", "playStoreLink", "credits", "testersRequired", "testersJoined", "createdAt"]
+    },
+    "Test": {
+      "title": "Test",
+      "description": "A record of a user testing an app",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique ID of the test record" },
+        "userId": { "type": "string", "description": "The UID of the user testing the app" },
+        "appId": { "type": "string", "description": "The ID of the app being tested" },
+        "startDate": { "type": "string", "format": "date-time", "description": "The timestamp when the test started" },
+        "completed": { "type": "boolean", "description": "Whether the test has been completed" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "The timestamp when the test was completed" },
+        "feedback": { "type": "string", "description": "The feedback provided by the tester" }
+      },
+      "required": ["id", "userId", "appId", "startDate", "completed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/apps/{appId}": {
+      "schema": "App",
+      "description": "Apps submitted for testing"
+    },
+    "/tests/{testId}": {
+      "schema": "Test",
+      "description": "Testing records"
+    }
+  }
+}
