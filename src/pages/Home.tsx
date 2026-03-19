@@ -31,11 +31,19 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
     app.developerName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
+      setLoginError(error.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -52,22 +60,32 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
           <h1 className="text-3xl font-bold text-slate-900">Test Apps</h1>
           <p className="text-slate-500 text-sm">Test these apps to get credits</p>
         </div>
-        {authLoading && !user ? (
-          <div className="w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        ) : user ? (
-          <div className="bg-orange-50 px-4 py-2 rounded-full flex items-center gap-2 border border-orange-100">
-            <Coins size={20} className="text-orange-500" />
-            <span className="font-bold text-slate-800">{user.credits}</span>
-          </div>
-        ) : (
-          <button 
-            onClick={handleLogin}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-md shadow-indigo-100 active:scale-95 transition-transform"
-          >
-            <LogIn size={18} />
-            <span className="text-sm font-semibold">Login</span>
-          </button>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          {authLoading && !user ? (
+            <div className="w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          ) : user ? (
+            <div className="bg-orange-50 px-4 py-2 rounded-full flex items-center gap-2 border border-orange-100">
+              <Coins size={20} className="text-orange-500" />
+              <span className="font-bold text-slate-800">{user.credits}</span>
+            </div>
+          ) : (
+            <button 
+              onClick={handleLogin}
+              disabled={isLoggingIn}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-md shadow-indigo-100 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoggingIn ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <LogIn size={18} />
+              )}
+              <span className="text-sm font-semibold">{isLoggingIn ? 'Logging in...' : 'Login'}</span>
+            </button>
+          )}
+          {loginError && (
+            <p className="text-[10px] text-red-500 font-medium max-w-[150px] text-right">{loginError}</p>
+          )}
+        </div>
       </div>
 
       {/* Search Bar */}

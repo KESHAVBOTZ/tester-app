@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAuth } from '../App';
 import { signOut, auth, signInWithPopup, googleProvider } from '../firebase';
 import { User, Briefcase, Settings, Share2, LogOut, LogIn, ChevronRight, Coins, CreditCard, Shield } from 'lucide-react';
@@ -17,11 +18,19 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
     }
   };
 
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
+      setLoginError(error.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -44,11 +53,19 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
         <p className="text-slate-500 text-center mb-8">Login to start testing apps and earn credits to publish your own.</p>
         <button
           onClick={handleLogin}
-          className="w-full max-w-xs bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
+          disabled={isLoggingIn}
+          className="w-full max-w-xs bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <LogIn size={20} />
-          Login with Google
+          {isLoggingIn ? (
+            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : (
+            <LogIn size={20} />
+          )}
+          {isLoggingIn ? 'Logging in...' : 'Login with Google'}
         </button>
+        {loginError && (
+          <p className="mt-4 text-sm text-red-500 font-medium text-center max-w-xs">{loginError}</p>
+        )}
       </div>
     );
   }

@@ -71,15 +71,22 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      // Don't throw here to avoid blocking the auth state change
+      // Fallback to basic profile from firebaseUser so the app doesn't "bounce back" to logged out state
+      const fallbackUser: UserProfile = {
+        uid,
+        name: firebaseUser?.displayName || 'User',
+        email: firebaseUser?.email || '',
+        credits: 50,
+        photoURL: firebaseUser?.photoURL || undefined,
+        role: firebaseUser?.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
+      };
+      setUser(fallbackUser);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    let deepLinkHandled = false;
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
@@ -92,19 +99,18 @@ export default function App() {
       } finally {
         setIsAuthChecking(false);
       }
-
-      // Handle deep linking only once
-      if (!deepLinkHandled) {
-        const params = new URLSearchParams(window.location.search);
-        const appId = params.get('app');
-        if (appId) {
-          setSelectedAppId(appId);
-          setCurrentPage('details');
-          deepLinkHandled = true;
-        }
-      }
     });
     return () => unsubscribe();
+  }, []);
+
+  // Handle deep linking only once on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const appId = params.get('app');
+    if (appId) {
+      setSelectedAppId(appId);
+      setCurrentPage('details');
+    }
   }, []);
 
   const refreshUser = async () => {
