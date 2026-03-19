@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import { db, doc, getDoc, setDoc, updateDoc, increment, serverTimestamp, Timestamp, OperationType, handleFirestoreError, query, collection, where, onSnapshot, arrayUnion } from '../firebase';
 import { AppModel, TestRecord } from '../types';
-import { ArrowLeft, MoreVertical, ExternalLink, Info, CheckCircle, Coins, Calendar, User, Share2, Copy, Play, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MoreVertical, ExternalLink, Info, CheckCircle, Coins, Calendar, User, Share2, Copy, Play, AlertCircle, Users } from 'lucide-react';
+import WelcomeModal from '../components/WelcomeModal';
 
 interface AppDetailsPageProps {
   appId: string;
@@ -17,6 +18,7 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [allFeedbacks, setAllFeedbacks] = useState<TestRecord[]>([]);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const isDeveloperInactive = app?.developerLastActiveAt 
     ? (Date.now() - app.developerLastActiveAt.toDate().getTime()) > 14 * 24 * 60 * 60 * 1000
@@ -80,6 +82,12 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
 
   const handleStartTesting = async () => {
     if (!user || !app) return;
+    
+    if (!user.joinedGroup) {
+      setShowWelcome(true);
+      return;
+    }
+
     setActionLoading(true);
 
     try {
@@ -130,6 +138,12 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
 
   const handleOpenApp = async () => {
     if (!user || !app || !testRecord) return;
+
+    if (!user.joinedGroup) {
+      setShowWelcome(true);
+      return;
+    }
+
     if (!canOpenToday()) {
       alert('You have already opened this app today. Come back tomorrow!');
       return;
@@ -241,6 +255,8 @@ export default function AppDetailsPage({ appId, onBack }: AppDetailsPageProps) {
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
+      {showWelcome && user && <WelcomeModal user={user} onClose={() => setShowWelcome(false)} />}
+      
       {/* Header */}
       <div className="p-6 flex items-center justify-between">
         <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full transition-colors">

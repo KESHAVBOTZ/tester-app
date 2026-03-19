@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../App';
 import { db, doc, setDoc, collection, serverTimestamp, updateDoc, increment, OperationType, handleFirestoreError } from '../firebase';
-import { ArrowLeft, Upload, Info, Coins, PlusCircle, Users, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Info, Coins, PlusCircle, Users, AlertCircle, ChevronDown, Copy } from 'lucide-react';
 import WelcomeModal from '../components/WelcomeModal';
 
 interface SubmitAppPageProps {
@@ -120,19 +120,62 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
       </div>
 
       {!user.joinedGroup && (
-        <div className="bg-orange-50 p-4 rounded-2xl mb-8 flex items-start gap-3 border border-orange-100">
-          <AlertCircle size={20} className="text-orange-600 mt-0.5" />
-          <div>
-            <p className="text-sm text-orange-900 font-bold">Google Group Required</p>
-            <p className="text-xs text-orange-700 mt-1 mb-2">
-              You must join our Google Group before you can publish an app.
-            </p>
+        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 mb-8 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900">Google Group Required</h2>
+              <p className="text-xs text-slate-500">Complete these steps to unlock publishing</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <div className="bg-slate-50 p-4 rounded-2xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-900">Step 1</span>
+                <ChevronDown size={16} className="text-slate-400" />
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Remove all of the emails added in the close testing track and just add the given google group there (Save it)
+              </p>
+              <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-[10px] font-mono text-indigo-600 truncate mr-2">
+                  apptester07@googlegroups.com
+                </span>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText('apptester07@googlegroups.com');
+                    alert('Copied!');
+                  }}
+                  className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900">Step 2</span>
+              <ChevronDown size={16} className="text-slate-400" />
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900">Step 3</span>
+              <ChevronDown size={16} className="text-slate-400" />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button className="flex-1 bg-sky-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm">
+              Watch Video
+            </button>
             <button 
-              type="button"
               onClick={() => setShowWelcome(true)}
-              className="text-xs font-bold text-indigo-600 flex items-center gap-1"
+              className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
             >
-              Join Group Now <Users size={12} />
+              Join Now
             </button>
           </div>
         </div>
