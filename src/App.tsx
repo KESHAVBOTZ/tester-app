@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, updateDoc, OperationType, handleFirestoreError } from './firebase';
+import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, updateDoc, onSnapshot, OperationType, handleFirestoreError } from './firebase';
 import { UserProfile } from './types';
 import { Home, User, PlusCircle, Settings, Layout as LayoutIcon, Briefcase, Shield } from 'lucide-react';
 import HomePage from './pages/Home';
@@ -28,79 +28,73 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
 
-  const fetchUserProfile = async (uid: string, firebaseUser: any) => {
-    setLoading(true);
-    try {
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      if (userDoc.exists()) {
-        let userData = userDoc.data() as UserProfile;
-        
-        // Ensure this specific email is always admin
-        if (userData.email === 'keshavrajlkr7@gmail.com' && userData.role !== 'admin') {
-          userData.role = 'admin';
-          try {
-            await updateDoc(doc(db, 'users', uid), { role: 'admin' });
-          } catch (e) {
-            console.error('Failed to update admin role:', e);
-          }
-        }
-        
-        setUser(userData);
-        // If admin, show dashboard on login if they are on home page
-        if (userData.role === 'admin' && currentPage === 'home' && window.location.search === '') {
-          setCurrentPage('admin');
-        }
-      } else {
-        // Create new user profile if it doesn't exist
-        const newUser: UserProfile = {
-          uid,
-          name: firebaseUser?.displayName || 'Anonymous',
-          email: firebaseUser?.email || '',
-          credits: 50, // Welcome credits
-          photoURL: firebaseUser?.photoURL || undefined,
-          role: firebaseUser?.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
-        };
-        try {
-          await setDoc(doc(db, 'users', uid), newUser);
-          setUser(newUser);
-        } catch (e) {
-          console.error('Failed to create user profile:', e);
-          // Still set user locally so they can use the app, even if profile creation failed in DB
-          setUser(newUser);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      // Fallback to basic profile from firebaseUser so the app doesn't "bounce back" to logged out state
-      const fallbackUser: UserProfile = {
-        uid,
-        name: firebaseUser?.displayName || 'User',
-        email: firebaseUser?.email || '',
-        credits: 50,
-        photoURL: firebaseUser?.photoURL || undefined,
-        role: firebaseUser?.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
-      };
-      setUser(fallbackUser);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        if (firebaseUser) {
-          await fetchUserProfile(firebaseUser.uid, firebaseUser);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-      } finally {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
+      if (firebaseUser) {
+        setIsAuthChecking(true);
+        // Set up real-time listener for user profile
+        unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
+          if (snapshot.exists()) {
+            let userData = snapshot.data() as UserProfile;
+            
+            // Ensure this specific email is always admin and joined group
+            if (userData.email === 'keshavrajlkr7@gmail.com' && (userData.role !== 'admin' || !userData.joinedGroup)) {
+              const updates: any = {};
+              if (userData.role !== 'admin') updates.role = 'admin';
+              if (!userData.joinedGroup) updates.joinedGroup = true;
+              
+              userData.role = 'admin';
+              userData.joinedGroup = true;
+              
+              try {
+                await updateDoc(doc(db, 'users', firebaseUser.uid), updates);
+              } catch (e) {
+                console.error('Failed to update admin profile:', e);
+              }
+            }
+            
+            setUser(userData);
+          } else {
+            // Create new user profile if it doesn't exist
+            const newUser: UserProfile = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || 'Anonymous',
+              email: firebaseUser.email || '',
+              credits: 100, // Welcome credits increased to 100
+              photoURL: firebaseUser.photoURL || undefined,
+              role: firebaseUser.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
+              joinedGroup: firebaseUser.email === 'keshavrajlkr7@gmail.com' ? true : false,
+            };
+            try {
+              await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+              setUser(newUser);
+            } catch (e) {
+              console.error('Failed to create user profile:', e);
+              setUser(newUser);
+            }
+          }
+          setIsAuthChecking(false);
+        }, (error) => {
+          console.error('Profile listener error:', error);
+          setIsAuthChecking(false);
+        });
+      } else {
+        setUser(null);
         setIsAuthChecking(false);
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   // Handle deep linking only once on mount
@@ -114,9 +108,8 @@ export default function App() {
   }, []);
 
   const refreshUser = async () => {
-    if (auth.currentUser) {
-      await fetchUserProfile(auth.currentUser.uid, auth.currentUser);
-    }
+    // Real-time listener handles updates, but we can add a small delay to ensure Firestore has propagated
+    await new Promise(resolve => setTimeout(resolve, 500));
   };
 
   const navigateTo = (page: string, appId?: string) => {

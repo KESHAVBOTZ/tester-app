@@ -13,7 +13,7 @@ export default function SubmitAppPage({ onBack }: SubmitAppPageProps) {
   const [name, setName] = useState('');
   const [developerName, setDeveloperName] = useState(user?.name || '');
   const [playStoreLink, setPlayStoreLink] = useState('');
-  const [testersRequired, setTestersRequired] = useState(10);
+  const [testersRequired, setTestersRequired] = useState(12);
   const [iconUrl, setIconUrl] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
