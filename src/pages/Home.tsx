@@ -9,7 +9,7 @@ interface HomePageProps {
 }
 
 export default function HomePage({ onSelectApp }: HomePageProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [apps, setApps] = useState<AppModel[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,9 @@ export default function HomePage({ onSelectApp }: HomePageProps) {
           <h1 className="text-3xl font-bold text-slate-900">Test Apps</h1>
           <p className="text-slate-500 text-sm">Test these apps to get credits</p>
         </div>
-        {user ? (
+        {authLoading && !user ? (
+          <div className="w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        ) : user ? (
           <div className="bg-orange-50 px-4 py-2 rounded-full flex items-center gap-2 border border-orange-100">
             <Coins size={20} className="text-orange-500" />
             <span className="font-bold text-slate-800">{user.credits}</span>

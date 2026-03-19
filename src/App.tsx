@@ -23,11 +23,13 @@ export const useAuth = () => useContext(AuthContext);
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
 
-  const fetchUserProfile = async (uid: string) => {
+  const fetchUserProfile = async (uid: string, firebaseUser: any) => {
+    setLoading(true);
     try {
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
@@ -36,47 +38,70 @@ export default function App() {
         // Ensure this specific email is always admin
         if (userData.email === 'keshavrajlkr7@gmail.com' && userData.role !== 'admin') {
           userData.role = 'admin';
-          await updateDoc(doc(db, 'users', uid), { role: 'admin' });
+          try {
+            await updateDoc(doc(db, 'users', uid), { role: 'admin' });
+          } catch (e) {
+            console.error('Failed to update admin role:', e);
+          }
         }
         
         setUser(userData);
         // If admin, show dashboard on login if they are on home page
-        if (userData.role === 'admin' && window.location.search === '') {
+        if (userData.role === 'admin' && currentPage === 'home' && window.location.search === '') {
           setCurrentPage('admin');
         }
       } else {
         // Create new user profile if it doesn't exist
         const newUser: UserProfile = {
           uid,
-          name: auth.currentUser?.displayName || 'Anonymous',
-          email: auth.currentUser?.email || '',
+          name: firebaseUser?.displayName || 'Anonymous',
+          email: firebaseUser?.email || '',
           credits: 50, // Welcome credits
-          photoURL: auth.currentUser?.photoURL || undefined,
-          role: auth.currentUser?.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
+          photoURL: firebaseUser?.photoURL || undefined,
+          role: firebaseUser?.email === 'keshavrajlkr7@gmail.com' ? 'admin' : 'user',
         };
-        await setDoc(doc(db, 'users', uid), newUser);
-        setUser(newUser);
+        try {
+          await setDoc(doc(db, 'users', uid), newUser);
+          setUser(newUser);
+        } catch (e) {
+          console.error('Failed to create user profile:', e);
+          // Still set user locally so they can use the app, even if profile creation failed in DB
+          setUser(newUser);
+        }
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `users/${uid}`);
+      console.error('Error fetching user profile:', error);
+      // Don't throw here to avoid blocking the auth state change
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        await fetchUserProfile(firebaseUser.uid);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
+    let deepLinkHandled = false;
 
-      // Handle deep linking
-      const params = new URLSearchParams(window.location.search);
-      const appId = params.get('app');
-      if (appId) {
-        setSelectedAppId(appId);
-        setCurrentPage('details');
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (firebaseUser) {
+          await fetchUserProfile(firebaseUser.uid, firebaseUser);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Auth state change error:', error);
+      } finally {
+        setIsAuthChecking(false);
+      }
+
+      // Handle deep linking only once
+      if (!deepLinkHandled) {
+        const params = new URLSearchParams(window.location.search);
+        const appId = params.get('app');
+        if (appId) {
+          setSelectedAppId(appId);
+          setCurrentPage('details');
+          deepLinkHandled = true;
+        }
       }
     });
     return () => unsubscribe();
@@ -84,7 +109,7 @@ export default function App() {
 
   const refreshUser = async () => {
     if (auth.currentUser) {
-      await fetchUserProfile(auth.currentUser.uid);
+      await fetchUserProfile(auth.currentUser.uid, auth.currentUser);
     }
   };
 
@@ -93,7 +118,7 @@ export default function App() {
     if (appId) setSelectedAppId(appId);
   };
 
-  if (loading) {
+  if (isAuthChecking) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>

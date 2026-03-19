@@ -7,7 +7,7 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ onNavigate }: ProfilePageProps) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -24,6 +24,15 @@ export default function ProfilePage({ onNavigate }: ProfilePageProps) {
       console.error('Login failed:', error);
     }
   };
+
+  if (loading && !user) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[80vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+        <p className="mt-4 text-slate-500 font-medium">Loading profile...</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
